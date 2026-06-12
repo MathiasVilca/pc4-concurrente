@@ -1,0 +1,78 @@
+package utils;
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+
+public class TCPServer50 {
+    private int port;
+    private volatile boolean running = false;
+    private ServerSocket serverSocket;
+    private List<TCPServerThread50> clientThreads = new ArrayList<>();
+    private int nrcli = 0;
+    private OnMessageReceived messageListener;
+
+    public TCPServer50(int port, OnMessageReceived messageListener) {
+        this.port = port;
+        this.messageListener = messageListener;
+    }
+
+    public OnMessageReceived getMessageListener() {
+        return this.messageListener;
+    }
+
+    public void run() {
+        running = true;
+        try {
+            serverSocket = new ServerSocket(port);
+            System.out.println("Servidor TCP iniciado en el puerto " + port + "...");
+
+            while (running) {
+                Socket client = serverSocket.accept();
+                nrcli++;
+                System.out.println("Nuevo cliente aceptado. Total: " + nrcli);
+
+                TCPServerThread50 clientThread = new TCPServerThread50(client, this, nrcli);
+                clientThreads.add(clientThread);
+
+                // Ejecución concurrente usando hilos nativos
+                new Thread(clientThread).start();
+            }
+        } catch (IOException e) {
+            System.out.println("Error en el servidor: " + e.getMessage());
+        } finally {
+            stop();
+        }
+    }
+
+    public void broadcastMessage(int tipo, String message) {
+        try {
+            byte[] data = message.getBytes("UTF-8");
+            for (TCPServerThread50 clientThread : clientThreads) {
+                clientThread.sendMessage(tipo, data);
+            }
+        } catch (IOException e) {
+            System.out.println("Error en broadcast: " + e.getMessage());
+        }
+    }
+
+    public void stop() {
+        running = false;
+        try {
+            if (serverSocket != null && !serverSocket.isClosed()) {
+                serverSocket.close();
+            }
+            for (TCPServerThread50 clientThread : clientThreads) {
+                clientThread.stopClient();
+            }
+        } catch (IOException e) {
+            System.out.println("Error al cerrar el servidor: " + e.getMessage());
+        }
+    }
+
+    public interface OnMessageReceived {
+        void messageReceived(String message);
+    }
+}
