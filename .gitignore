@@ -14,8 +14,4 @@ bin/
 .DS_Store
 Thumbs.db
 
-# Temporales de LaTeX (Para cuando compilen el informe)
-*.aux
-*.log
-*.out
-*.toc
+
