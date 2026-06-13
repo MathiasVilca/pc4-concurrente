@@ -3,7 +3,9 @@ package com.example.dogmessengerclient
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import java.io.*
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.IOException
 import java.net.InetAddress
 import java.net.Socket
 import java.util.concurrent.ExecutorService
@@ -20,21 +22,27 @@ class TCPClient50(
     }
 
     private var mRun = false
-    private var out: PrintWriter? = null
-    private var `in`: BufferedReader? = null
+    private var mOut: DataOutputStream? = null
+    private var mIn: DataInputStream? = null
     private var socket: Socket? = null
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun sendMessage(message: String) {
-        // Enviar mensaje en un hilo separado
         executor.execute {
             try {
-                if (out != null && !out!!.checkError()) {
-                    out!!.println(message)
-                    out!!.flush()
+                if (mOut != null) {
+                    // Protocolo: Convertir texto a bytes
+                    val data = message.toByteArray(Charsets.UTF_8)
+
+                    mOut!!.writeByte(1) // 1 byte: Tipo (1 = Texto)
+                    mOut!!.writeInt(data.size) // 4 bytes: Longitud
+                    mOut!!.write(data) // N bytes: Payload
+                    mOut!!.flush()
+
                     Log.d(TAG, "Mensaje enviado: $message")
                 } else {
-                    Log.e(TAG, "No se puede enviar: out es null o tiene error")
+                    Log.e(TAG, "No se puede enviar: mOut es null")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error al enviar mensaje: ${e.message}")
@@ -57,20 +65,29 @@ class TCPClient50(
             mRun = true
             try {
                 val serverAddr = InetAddress.getByName(serverIp)
-                Log.d(TAG, "Conectando a $serverIp:$SERVERPORT...")
-                //socket = Socket(serverAddr, portIp_)
+                Log.d(TAG, "Conectando a $serverIp:$portIp_...")
                 socket = Socket(serverAddr, portIp_)
 
                 try {
-                    out = PrintWriter(BufferedWriter(OutputStreamWriter(socket!!.getOutputStream())), true)
-                    Log.d(TAG, "OutputStream listo")
-                    `in` = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+                    // Instanciar flujos binarios
+                    mOut = DataOutputStream(socket!!.getOutputStream())
+                    mIn = DataInputStream(socket!!.getInputStream())
+                    Log.d(TAG, "Flujos binarios listos")
 
                     while (mRun) {
-                        val serverMsg = `in`?.readLine()
-                        if (!serverMsg.isNullOrEmpty() && messageListener != null) {
-                            // Usar Handler para actualizar UI
-                            Handler(Looper.getMainLooper()).post {
+                        // Protocolo Día 1: Leer Cabecera
+                        val tipo = mIn!!.readByte().toInt()
+                        val longitud = mIn!!.readInt()
+
+                        // Leer Payload
+                        val payload = ByteArray(longitud)
+                        mIn!!.readFully(payload)
+
+                        if (tipo == 1 && messageListener != null) {
+                            val serverMsg = String(payload, Charsets.UTF_8)
+
+                            // Actualizar UI en el hilo principal
+                            mainHandler.post {
                                 messageListener.messageReceived(serverMsg)
                             }
                         }
