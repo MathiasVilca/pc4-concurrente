@@ -50,6 +50,24 @@ class TCPClient50(
         }
     }
 
+    fun sendBinaryFile(tipo: Int, data: ByteArray) {
+        executor.execute {
+            try {
+                if (mOut != null) {
+                    mOut!!.writeByte(tipo) // Tipo 2 (Imagen) o 3 (Archivo)
+                    mOut!!.writeInt(data.size) // Longitud
+                    mOut!!.write(data) // Vomitamos todos los bytes crudos
+                    mOut!!.flush()
+                    Log.d(TAG, "Archivo enviado. Tamaño: ${data.size} bytes")
+                } else {
+                    Log.e(TAG, "No se puede enviar: mOut es null")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error al enviar archivo: ${e.message}")
+            }
+        }
+    }
+
     fun stopClient() {
         mRun = false
         executor.shutdown()
@@ -72,10 +90,10 @@ class TCPClient50(
                     // Instanciar flujos binarios
                     mOut = DataOutputStream(socket!!.getOutputStream())
                     mIn = DataInputStream(socket!!.getInputStream())
-                    Log.d(TAG, "Flujos binarios listos")
+                    Log.d(TAG, "Flujo listos")
 
                     while (mRun) {
-                        // Protocolo Día 1: Leer Cabecera
+                        // Protocolo Leer Cabecera
                         val tipo = mIn!!.readByte().toInt()
                         val longitud = mIn!!.readInt()
 

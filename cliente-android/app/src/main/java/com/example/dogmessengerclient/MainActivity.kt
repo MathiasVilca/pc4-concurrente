@@ -1,5 +1,7 @@
 package com.example.dogmessengerclient
-
+import android.net.Uri
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.InputStream
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -35,6 +37,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDesconectar: Button
     private lateinit var tvMensajes: TextView
 
+    private lateinit var btnEnviarImagen: Button
+
+    // Lanzador moderno de Android para seleccionar archivos
+    private val selectImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            enviarImagenAlServidor(it)
+        }
+    }
     private lateinit var etPorts: EditText
 
     private lateinit var etIp: EditText
@@ -73,7 +83,7 @@ class MainActivity : AppCompatActivity() {
         etIp = findViewById(R.id.etIP_)
 
         scrollView = findViewById(R.id.scrollView_)
-
+        btnEnviarImagen = findViewById(R.id.btnEnviarImagen_)
     }
 
     private fun setupListeners() {
@@ -87,6 +97,11 @@ class MainActivity : AppCompatActivity() {
 
         btnEnviar.setOnClickListener {
             enviarMensaje()
+        }
+
+        btnEnviarImagen.setOnClickListener {
+            // Al hacer clic, abre el explorador buscando solo imágenes
+            selectImageLauncher.launch("image/*")
         }
     }
 
@@ -167,6 +182,7 @@ class MainActivity : AppCompatActivity() {
     private fun habilitarEnvio(habilitado: Boolean) {
         btnEnviar.isEnabled = habilitado
         etMensaje.isEnabled = habilitado
+        btnEnviarImagen.isEnabled = habilitado
     }
 
     private fun verificarPermisos() {
@@ -182,6 +198,30 @@ class MainActivity : AppCompatActivity() {
                     PERMISSION_REQUEST_CODE
                 )
             }
+        }
+    }
+
+    private fun enviarImagenAlServidor(uri: Uri) {
+        if (!isConnected || mTcpClient == null) {
+            Toast.makeText(this, "No estás conectado al servidor", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            // Usamos el ContentResolver nativo de Android para leer el archivo
+            val inputStream: InputStream? = contentResolver.openInputStream(uri)
+            val bytes = inputStream?.readBytes() // Leemos la imagen a la memoria RAM
+            inputStream?.close()
+
+            if (bytes != null) {
+                // ¡Magia! Enviamos el Tipo 2 y la matriz de bytes pura
+                mTcpClient?.sendBinaryFile(2, bytes)
+                agregarMensaje("Yo: [Imagen enviada, tamaño: ${bytes.size} bytes]")
+            } else {
+                Toast.makeText(this, "No se pudo leer la imagen", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error leyendo imagen: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
