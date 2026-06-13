@@ -24,11 +24,12 @@ public class MainVentas {
             @Override
             public void messageReceived(String message) {
                 long inicioProcesamiento = System.currentTimeMillis();
-
+                System.out.println("[NODO VENTAS RECIBIÓ]: " + message);
                 //Registro de Clientes, Pedidos y Comprobantes
-                if (message.startsWith("COMPRAR:")) {
+                if (message.contains("COMPRAR:")) { //evade prefijo
                     //FORMATO ESPERADO DE COMPRA: "COMPRAR:Mathias:PREMIUM"
-                    String[] partes = message.split(":");
+                    String comandoReal = message.substring(message.indexOf("COMPRAR:"));
+                    String[] partes = comandoReal.split(":");
                     if (partes.length == 3) {
                         String cliente = partes[1].trim();
                         String producto = partes[2].trim().toUpperCase();
@@ -52,7 +53,7 @@ public class MainVentas {
                     }
                 }
                 //Reportes Automáticos y Metricas de Rendimiento
-                else if (message.equals("REPORTE")) {
+                else if (message.contains("REPORTE")) {
                     String reporte = "=== MÉTRICAS DE RENDIMIENTO ===\n" +
                             "Pedidos procesados: " + totalPedidosProcesados + "\n" +
                             "Tiempo prom. procesamiento: " + (totalPedidosProcesados > 0 ? (tiempoTotalProcesamiento/totalPedidosProcesados) : 0) + " ms\n" +
