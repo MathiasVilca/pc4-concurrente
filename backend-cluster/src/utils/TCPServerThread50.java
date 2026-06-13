@@ -44,8 +44,14 @@ public class TCPServerThread50 implements Runnable {
                         String texto = new String(payload, "UTF-8");
                         tcpserver.getMessageListener().messageReceived("Cliente " + clientID + ": " + texto);
                     } else {
-                        // Para imágenes o archivos (Día 2), pasamos los bytes puros
-                        tcpserver.getMessageListener().messageReceived("Cliente " + clientID + " envió archivo/imagen de " + longitud + " bytes.");
+                        // Para imágenes (2) o archivos (3), guardamos los bytes en disco
+                        String extension = (tipo == 2) ? ".jpg" : ".dat";
+                        String fileName = "recibido_cliente_" + clientID + "_" + System.currentTimeMillis() + extension;
+
+                        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName)) {
+                            fos.write(payload);
+                        }
+                        tcpserver.getMessageListener().messageReceived("Archivo guardado con éxito: " + fileName + " (" + longitud + " bytes)");
                     }
                 }
             }
