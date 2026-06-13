@@ -20,6 +20,18 @@
         app:layout_constraintVertical_bias="0.341" />
 
     <Button
+        android:id="@+id/btnComprar_"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Comprar Premium"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.117"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.516" />
+
+    <Button
         android:id="@+id/btnConectar_"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -131,5 +143,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.064" />
+
+    <Button
+        android:id="@+id/btnReporte_"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Metricas (admin)"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.831"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.53" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

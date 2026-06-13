@@ -25,7 +25,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 //import androidx.appcompat.app.AppCompatActivity
 import java.util.*
-import kotlin.run
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -39,6 +38,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var btnEnviarImagen: Button
 
+    private lateinit var btnComprar: Button
+    private lateinit var btnReporte: Button
+
     // Lanzador moderno de Android para seleccionar archivos
     private val selectImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -51,6 +53,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
 
     private var mTcpClient: TCPClient50? = null
+
+    private var mVentasClient: TCPClient50? = null // segundo cliente
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isConnected = false
 
@@ -78,6 +82,8 @@ class MainActivity : AppCompatActivity() {
         btnEnviar = findViewById(R.id.btnEnviar_)
         btnConectar = findViewById(R.id.btnConectar_)
         btnDesconectar = findViewById(R.id.btnDesconectar_)
+        btnComprar = findViewById(R.id.btnComprar_)
+        btnReporte = findViewById(R.id.btnReporte_)
         tvMensajes = findViewById(R.id.tvMensajes_)
         etPorts = findViewById(R.id.etPort_)
         etIp = findViewById(R.id.etIP_)
@@ -102,6 +108,25 @@ class MainActivity : AppCompatActivity() {
         btnEnviarImagen.setOnClickListener {
             // Al hacer clic, abre el explorador buscando solo imágenes
             selectImageLauncher.launch("image/*")
+        }
+
+        btnComprar.setOnClickListener {
+            if (mVentasClient != null) {
+                // Se envía el comando estructurado al puerto 8192
+                // Formato: COMPRAR : Cliente : Producto
+                mVentasClient?.sendMessage("COMPRAR:Mathias:PREMIUM")
+                agregarMensaje("Yo: Procesando compra...")
+            } else {
+                Toast.makeText(this, "Nodo de ventas inactivo", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnReporte.setOnClickListener {
+            if (mVentasClient != null) {
+                // Se solicita el reporte automático de métricas
+                mVentasClient?.sendMessage("REPORTE")
+                agregarMensaje("Yo: Solicitando métricas...")
+            }
         }
     }
 
@@ -129,6 +154,24 @@ class MainActivity : AppCompatActivity() {
 
         // Iniciar la conexión (ya maneja su propio hilo)
         mTcpClient?.run()
+
+        // conexion simultanea al Bot de Ventas
+        mVentasClient = TCPClient50(serverIp, 8192, object : TCPClient50.OnMessageReceived {
+            override fun messageReceived(message: String) {
+                // Mostrar el recibo o reporte en la pantalla del comprador
+                mainHandler.post {
+                    agregarMensaje("Ventas Bot: \n$message")
+                }
+
+                // SINCRONIZACIÓN
+                // Si el mensaje es un comprobante, lo enviamos al túnel de CHAT NORMAL (8189)
+                // para que los vendedores en otros nodos puedan verlo e iniciar la conversación.
+                if (message.contains("COMPROBANTE")) {
+                    mTcpClient?.sendMessage("SISTEMA: El usuario ha generado un pedido:\n$message")
+                }
+            }
+        })
+        mVentasClient?.run()
 
         // Esperar un momento para dar tiempo a la conexión
         mainHandler.postDelayed({
