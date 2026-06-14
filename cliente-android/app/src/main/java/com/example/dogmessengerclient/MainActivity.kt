@@ -230,6 +230,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (mensaje.startsWith("/join ")) {
+            val nuevoGrupo = mensaje.removePrefix("/join ").trim()
+            // Se envía en texto plano porque es una orden para el servidor
+            mTcpClient?.sendMessage("JOIN:$nuevoGrupo")
+            agregarMensaje("--- Te has movido al grupo: $nuevoGrupo ---")
+            etMensaje.text.clear()
+            return
+        }
+
+        //Si no es comando, se cifra como antes
+
         // El sendMessage ya maneja su propio hilo
         // Se Cifra el texto usando el motor que creamos
         val mensajeCifrado = AESCrypto.encrypt(mensaje)
