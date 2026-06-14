@@ -58,6 +58,20 @@ public class TCPServer50 {
         }
     }
 
+    public void broadcastToGroup(String grupo, int tipo, String message) {
+        try {
+            byte[] data = message.getBytes("UTF-8");
+            for (TCPServerThread50 clientThread : clientThreads) {
+                // El filtro mágico de grupos
+                if (clientThread.grupoActual.equals(grupo)) {
+                    clientThread.sendMessage(tipo, data);
+                }
+            }
+        } catch (IOException e) {
+            System.out.println("Error en broadcast a grupo: " + e.getMessage());
+        }
+    }
+
     public void stop() {
         running = false;
         try {

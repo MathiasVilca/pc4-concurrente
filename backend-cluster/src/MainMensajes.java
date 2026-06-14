@@ -10,11 +10,16 @@ public class MainMensajes {
         serverRef[0] = new TCPServer50(8189, new TCPServer50.OnMessageReceived() {
             @Override
             public void messageReceived(String message) {
-                // Servidor imprime texto cifrado
-                System.out.println("[NODO MENSAJES] " + message);
+                // Separamos el nombre del grupo del mensaje real
+                if (message.contains("|")) {
+                    String[] partes = message.split("\\|", 2);
+                    String grupo = partes[0];
+                    String textoReal = partes[1];
 
-                //Retransmisión (prueba)
-                serverRef[0].broadcastMessage(1, message);
+                    System.out.println("[GRUPO " + grupo + "] " + textoReal);
+                    // Retransmitimos solo a los miembros de ese grupo
+                    serverRef[0].broadcastToGroup(grupo, 1, textoReal);
+                }
             }
         });
 

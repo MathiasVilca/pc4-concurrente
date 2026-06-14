@@ -12,6 +12,7 @@ public class TCPServerThread50 implements Runnable {
     private volatile boolean running = false;
     private DataOutputStream mOut;
     private DataInputStream mIn;
+    public String grupoActual = "General";
 
     public TCPServerThread50(Socket client, TCPServer50 tcpserver, int clientID) {
         this.client = client;
@@ -42,7 +43,14 @@ public class TCPServerThread50 implements Runnable {
                 if (tcpserver.getMessageListener() != null) {
                     if (tipo == 1) {
                         String texto = new String(payload, "UTF-8");
-                        tcpserver.getMessageListener().messageReceived("Cliente " + clientID + ": " + texto);
+                        // Si es un comando de cambio de grupo, no se cifra y se procesa aquí
+                        if (texto.startsWith("JOIN:")) {
+                            this.grupoActual = texto.substring(5).trim();
+                            System.out.println("Cliente " + clientID + " se unió al grupo: " + this.grupoActual);
+                        } else {
+                            // Pasamos el grupo y el mensaje al nodo principal separados por un "|"
+                            tcpserver.getMessageListener().messageReceived(this.grupoActual + "|" + "Cliente " + clientID + ": " + texto);
+                        }
                     } else {
                         // Para imágenes (2) o archivos (3), guardamos los bytes en disco
                         String extension = (tipo == 2) ? ".jpg" : ".dat";
