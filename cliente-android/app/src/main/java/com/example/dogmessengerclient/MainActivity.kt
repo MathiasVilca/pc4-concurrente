@@ -147,7 +147,28 @@ class MainActivity : AppCompatActivity() {
         mTcpClient = TCPClient50(serverIp, miport.toInt(),object : TCPClient50.OnMessageReceived {
             override fun messageReceived(message: String) {
                 mainHandler.post {
-                    agregarMensaje("Servidor: $message")
+                    // El servidor envía con el formato "Cliente X: Mensaje"
+                    if (message.startsWith("Cliente ")) {
+                        val partes = message.split(": ", limit = 2)
+                        if (partes.size == 2) {
+                            val remitente = partes[0]
+                            val payloadCifrado = partes[1]
+
+                            try {
+                                // Intentamos desencriptar el bloque
+                                val textoClaro = AESCrypto.decrypt(payloadCifrado)
+                                agregarMensaje("$remitente: $textoClaro 🔓")
+                            } catch (e: Exception) {
+                                // Si falla (ej. un mensaje de sistema no cifrado), lo mostramos tal cual
+                                agregarMensaje(message)
+                            }
+                        } else {
+                            agregarMensaje(message)
+                        }
+                    } else {
+                        // Mensajes generales del sistema (ej. un nuevo cliente conectado)
+                        agregarMensaje(message)
+                    }
                 }
             }
         })
@@ -210,8 +231,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         // El sendMessage ya maneja su propio hilo
-        mTcpClient?.sendMessage(mensaje)
-        agregarMensaje("Yo: $mensaje")
+        // Se Cifra el texto usando el motor que creamos
+        val mensajeCifrado = AESCrypto.encrypt(mensaje)
+
+        // Enviamos mensaje encriptado por el socket
+        mTcpClient?.sendMessage(mensajeCifrado)
+
+        // Mostramos el mensaje original en la pantalla con un candadito
+        agregarMensaje("Yo: $mensaje 🔒")
         etMensaje.text.clear()
     }
 
