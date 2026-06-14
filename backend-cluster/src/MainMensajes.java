@@ -2,16 +2,23 @@ import utils.TCPServer50;
 
 public class MainMensajes {
     public static void main(String[] args) {
-        // Instanciamos el servidor en el puerto 8189
-        TCPServer50 server = new TCPServer50(8189, new TCPServer50.OnMessageReceived() {
+        System.out.println("Iniciando Nodo de Mensajes en puerto 8189...");
+
+        // Usamos un array de 1 elemento para poder usarlo dentro del OnMessageReceived
+        final TCPServer50[] serverRef = new TCPServer50[1];
+
+        serverRef[0] = new TCPServer50(8189, new TCPServer50.OnMessageReceived() {
             @Override
             public void messageReceived(String message) {
-                // Esto es lo que hará el servidor cuando reciba un texto válido
+                // Servidor imprime texto cifrado
                 System.out.println("[NODO MENSAJES] " + message);
+
+                //Retransmisión (prueba)
+                serverRef[0].broadcastMessage(1, message);
             }
         });
 
         // Arrancamos el servidor
-        server.run();
+        serverRef[0].run();
     }
 }
