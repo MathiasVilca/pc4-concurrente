@@ -166,11 +166,11 @@
             android:background="#F2F2F2"
             android:padding="8dp">
 
-            <TextView
-                android:id="@+id/tvMensajes_"
+            <LinearLayout
+                android:id="@+id/chatContainer_"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="" />
+                android:orientation="vertical" />
         </ScrollView>
     </LinearLayout>
 </ScrollView>

@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +19,8 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -54,14 +58,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnEmitirQr: Button
     private lateinit var btnEscanearQr: Button
     private lateinit var btnClonar: Button
-    private lateinit var tvMensajes: TextView
     private lateinit var tvQrToken: TextView
+    private lateinit var chatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
 
     private var mTcpClient: TCPClient50? = null
     private var mVentasClient: TCPClient50? = null
-    private var mImagenClient: TCPClient50? = null
-    private var mArchivosClient: TCPClient50? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pendingOwnAttachmentMessages = mutableSetOf<String>()
     private var assignedChatClientId: String? = null
@@ -126,8 +128,8 @@ class MainActivity : AppCompatActivity() {
         btnEmitirQr = findViewById(R.id.btnEmitirQr_)
         btnEscanearQr = findViewById(R.id.btnEscanearQr_)
         btnClonar = findViewById(R.id.btnClonar_)
-        tvMensajes = findViewById(R.id.tvMensajes_)
         tvQrToken = findViewById(R.id.tvQrToken_)
+        chatContainer = findViewById(R.id.chatContainer_)
         scrollView = findViewById(R.id.scrollView_)
     }
 
@@ -205,24 +207,6 @@ class MainActivity : AppCompatActivity() {
         })
         mTcpClient?.run()
 
-        mImagenClient = TCPClient50(serverIp, 8191, object : TCPClient50.OnMessageReceived {
-            override fun messageReceived(message: String) {
-                mainHandler.post {
-                    agregarMensaje("Nodo Imagenes: $message")
-                }
-            }
-        })
-        mImagenClient?.run()
-
-        mArchivosClient = TCPClient50(serverIp, 8190, object : TCPClient50.OnMessageReceived {
-            override fun messageReceived(message: String) {
-                mainHandler.post {
-                    agregarMensaje("Nodo Archivos: $message")
-                }
-            }
-        })
-        mArchivosClient?.run()
-
         mVentasClient = TCPClient50(serverIp, 8192, object : TCPClient50.OnMessageReceived {
             override fun messageReceived(message: String) {
                 mainHandler.post {
@@ -249,19 +233,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun desconectarDelServidor() {
-        if (mTcpClient == null && mVentasClient == null && mImagenClient == null && mArchivosClient == null) {
+        if (mTcpClient == null && mVentasClient == null) {
             return
         }
 
         agregarMensaje("Desconectando del servidor...")
         mTcpClient?.stopClient()
         mVentasClient?.stopClient()
-        mImagenClient?.stopClient()
-        mArchivosClient?.stopClient()
         mTcpClient = null
         mVentasClient = null
-        mImagenClient = null
-        mArchivosClient = null
         isConnected = false
         habilitarEnvio(false)
         btnConectar.isEnabled = true
@@ -398,7 +378,95 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun agregarMensaje(mensaje: String) {
-        tvMensajes.append("$mensaje\n")
+        val textView = TextView(this)
+        textView.text = mensaje
+        textView.textSize = 14f
+        chatContainer.addView(textView)
+
+        extraerNombreImagen(mensaje)?.let { imageName ->
+            descargarYMostrarImagen(imageName)
+        }
+
+        scrollView.post {
+            scrollView.fullScroll(ScrollView.FOCUS_DOWN)
+        }
+    }
+
+    private fun extraerNombreImagen(mensaje: String): String? {
+        val regex = Regex("\\[Imagen recibido: ([^\\s\\]]+) \\([0-9]+ bytes\\)\\]")
+        return regex.find(mensaje)?.groupValues?.get(1)
+    }
+
+    private fun descargarYMostrarImagen(nombreArchivo: String) {
+        Thread {
+            try {
+                val bytes = solicitarBinario(8191, "GET_IMAGE:$nombreArchivo")
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                mainHandler.post {
+                    if (bitmap != null) {
+                        agregarImagen(bitmap)
+                    } else {
+                        agregarTextoSimple("No se pudo mostrar imagen $nombreArchivo")
+                    }
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    agregarTextoSimple("No se pudo descargar imagen $nombreArchivo: ${e.message}")
+                }
+            }
+        }.start()
+    }
+
+    private fun solicitarBinario(port: Int, command: String): ByteArray {
+        val serverIp = etIp.text.toString().trim()
+        val data = command.toByteArray(Charsets.UTF_8)
+
+        return Socket(InetAddress.getByName(serverIp), port).use { socket ->
+            socket.soTimeout = 8000
+            val out = DataOutputStream(socket.getOutputStream())
+            out.writeByte(1)
+            out.writeInt(data.size)
+            out.write(data)
+            out.flush()
+
+            val input = DataInputStream(socket.getInputStream())
+            val responseType = input.readByte().toInt()
+            val responseLength = input.readInt()
+            val responsePayload = ByteArray(responseLength)
+            input.readFully(responsePayload)
+
+            if (responseType != 2) {
+                val error = String(responsePayload, Charsets.UTF_8)
+                throw IllegalStateException(error)
+            }
+
+            responsePayload
+        }
+    }
+
+    private fun agregarImagen(bitmap: Bitmap) {
+        val imageView = ImageView(this)
+        imageView.setImageBitmap(bitmap)
+        imageView.adjustViewBounds = true
+        imageView.scaleType = ImageView.ScaleType.CENTER_CROP
+
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            420
+        )
+        params.setMargins(0, 6, 0, 10)
+        imageView.layoutParams = params
+        chatContainer.addView(imageView)
+        scrollView.post {
+            scrollView.fullScroll(ScrollView.FOCUS_DOWN)
+        }
+    }
+
+    private fun agregarTextoSimple(mensaje: String) {
+        val textView = TextView(this)
+        textView.text = mensaje
+        textView.textSize = 12f
+        chatContainer.addView(textView)
         scrollView.post {
             scrollView.fullScroll(ScrollView.FOCUS_DOWN)
         }
@@ -504,6 +572,7 @@ class MainActivity : AppCompatActivity() {
                 val mensajeChat = enviarAvisoRecibido(etiqueta, bytes.size, nombreArchivo, port, tipo, bytes)
                 mainHandler.post {
                     agregarMensaje("Yo: $mensajeChat")
+                    pendingOwnAttachmentMessages.add(mensajeChat)
                     mTcpClient?.sendMessage(mensajeChat)
                     Toast.makeText(this, "$etiqueta enviado", Toast.LENGTH_SHORT).show()
                 }

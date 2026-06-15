@@ -1,16 +1,18 @@
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import javax.swing.JButton;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.awt.Image;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -22,6 +24,8 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class DogMessengerDesktop extends JFrame {
     private final JTextField txtIp = new JTextField("127.0.0.1");
@@ -29,7 +33,8 @@ public class DogMessengerDesktop extends JFrame {
     private final JTextField txtIdChat = new JTextField("0812");
     private final JTextField txtToken = new JTextField("DOGQR://CLONE/0812");
     private final JTextField txtMessage = new JTextField();
-    private final JTextArea txtChat = new JTextArea();
+    private final JPanel chatPanel = new JPanel();
+    private final JScrollPane chatScrollPane = new JScrollPane(chatPanel);
 
     private Socket socket;
     private DataOutputStream out;
@@ -43,9 +48,9 @@ public class DogMessengerDesktop extends JFrame {
         setSize(720, 520);
         setLocationRelativeTo(null);
 
-        txtChat.setEditable(false);
+        chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
         add(buildTopPanel(), BorderLayout.NORTH);
-        add(new JScrollPane(txtChat), BorderLayout.CENTER);
+        add(chatScrollPane, BorderLayout.CENTER);
         add(buildBottomPanel(), BorderLayout.SOUTH);
     }
 
@@ -214,6 +219,7 @@ public class DogMessengerDesktop extends JFrame {
             String chatMessage = sendBinaryToNode(port, tipo, fileName, data);
             append("Yo: " + chatMessage);
             if (running) {
+                pendingOwnAttachmentMessages.add(chatMessage);
                 sendPlain(chatMessage);
             }
         } catch (Exception e) {
@@ -320,8 +326,94 @@ public class DogMessengerDesktop extends JFrame {
     }
 
     private void append(String text) {
-        txtChat.append(text + "\n");
-        txtChat.setCaretPosition(txtChat.getDocument().getLength());
+        JLabel label = new JLabel("<html>" + escapeHtml(text) + "</html>");
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        chatPanel.add(label);
+        extractImageName(text);
+        scrollToBottom();
+    }
+
+    private void extractImageName(String text) {
+        Pattern pattern = Pattern.compile("\\[Imagen recibido: ([^\\s\\]]+) \\([0-9]+ bytes\\)\\]");
+        Matcher matcher = pattern.matcher(text);
+        if (matcher.find()) {
+            downloadAndAppendImage(matcher.group(1));
+        }
+    }
+
+    private void downloadAndAppendImage(String imageName) {
+        new Thread(() -> {
+            try {
+                byte[] imageBytes = requestBinary(8191, "GET_IMAGE:" + imageName);
+                ImageIcon icon = new ImageIcon(imageBytes);
+                if (icon.getIconWidth() <= 0) {
+                    SwingUtilities.invokeLater(() -> appendSmallText("No se pudo mostrar imagen " + imageName));
+                    return;
+                }
+
+                int targetWidth = 360;
+                int width = icon.getIconWidth();
+                int height = icon.getIconHeight();
+                int targetHeight = Math.max(120, (height * targetWidth) / Math.max(width, 1));
+                Image scaledImage = icon.getImage().getScaledInstance(targetWidth, targetHeight, Image.SCALE_SMOOTH);
+                ImageIcon scaledIcon = new ImageIcon(scaledImage);
+
+                SwingUtilities.invokeLater(() -> {
+                    JLabel imageLabel = new JLabel(scaledIcon);
+                    imageLabel.setAlignmentX(LEFT_ALIGNMENT);
+                    chatPanel.add(imageLabel);
+                    scrollToBottom();
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> appendSmallText("No se pudo descargar imagen " + imageName + ": " + e.getMessage()));
+            }
+        }, "dog-desktop-image-loader").start();
+    }
+
+    private byte[] requestBinary(int port, String command) throws Exception {
+        String ip = txtIp.getText().trim();
+        byte[] data = command.getBytes(StandardCharsets.UTF_8);
+
+        try (Socket requestSocket = new Socket(InetAddress.getByName(ip), port);
+             DataOutputStream requestOut = new DataOutputStream(requestSocket.getOutputStream());
+             DataInputStream requestIn = new DataInputStream(requestSocket.getInputStream())) {
+            requestSocket.setSoTimeout(8000);
+            requestOut.writeByte(1);
+            requestOut.writeInt(data.length);
+            requestOut.write(data);
+            requestOut.flush();
+
+            int responseType = requestIn.readByte();
+            int responseLength = requestIn.readInt();
+            byte[] responsePayload = new byte[responseLength];
+            requestIn.readFully(responsePayload);
+
+            if (responseType != 2) {
+                throw new IllegalStateException(new String(responsePayload, StandardCharsets.UTF_8));
+            }
+
+            return responsePayload;
+        }
+    }
+
+    private void appendSmallText(String text) {
+        JLabel label = new JLabel("<html><small>" + escapeHtml(text) + "</small></html>");
+        label.setAlignmentX(LEFT_ALIGNMENT);
+        chatPanel.add(label);
+        scrollToBottom();
+    }
+
+    private void scrollToBottom() {
+        chatPanel.revalidate();
+        chatPanel.repaint();
+        SwingUtilities.invokeLater(() -> chatScrollPane.getVerticalScrollBar().setValue(chatScrollPane.getVerticalScrollBar().getMaximum()));
+    }
+
+    private String escapeHtml(String text) {
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\n", "<br>");
     }
 
     private void disconnect() {

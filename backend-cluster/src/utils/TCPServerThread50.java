@@ -4,10 +4,12 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class TCPServerThread50 implements Runnable {
     private Socket client;
@@ -78,6 +80,11 @@ public class TCPServerThread50 implements Runnable {
     }
 
     private void processTextMessage(String texto) {
+        if (texto.startsWith("GET_IMAGE:") || texto.startsWith("GET_FILE:")) {
+            sendStoredBinary(texto.substring(texto.indexOf(":") + 1).trim());
+            return;
+        }
+
         if (texto.startsWith("JOIN:")) {
             this.grupoActual = texto.substring(5).trim();
             System.out.println("Cliente " + clientID + " se unio al grupo: " + this.grupoActual);
@@ -122,6 +129,37 @@ public class TCPServerThread50 implements Runnable {
         tcpserver.saveHistory(this.idClientChat, eventoArchivo);
         tcpserver.getMessageListener().messageReceived(this.grupoActual + "|" + eventoArchivo);
         sendText("BINARY_OK:" + detalleArchivo);
+    }
+
+    private void sendStoredBinary(String requestedName) {
+        try {
+            String safeName = new File(requestedName).getName();
+            if (!safeName.startsWith("recibido_cliente_")) {
+                sendText("ERROR: Archivo no permitido");
+                return;
+            }
+
+            File file = new File(safeName);
+            if (!file.exists() || !file.isFile()) {
+                sendText("ERROR: Archivo no encontrado " + safeName);
+                return;
+            }
+
+            byte[] data = Files.readAllBytes(file.toPath());
+            int tipo = isImageFile(safeName) ? 2 : 3;
+            sendMessage(tipo, data);
+            System.out.println("TCP Server S: Enviado archivo solicitado " + safeName + " (" + data.length + " bytes)");
+        } catch (IOException e) {
+            sendText("ERROR: No se pudo enviar archivo: " + e.getMessage());
+        }
+    }
+
+    private boolean isImageFile(String fileName) {
+        String lowerName = fileName.toLowerCase();
+        return lowerName.endsWith(".jpg")
+                || lowerName.endsWith(".jpeg")
+                || lowerName.endsWith(".png")
+                || lowerName.endsWith(".webp");
     }
 
     private FilePayload decodeFilePayload(byte[] payload) {
