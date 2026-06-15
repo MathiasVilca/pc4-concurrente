@@ -1,9 +1,13 @@
 package utils;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 public class TCPServerThread50 implements Runnable {
     private Socket client;
@@ -13,6 +17,8 @@ public class TCPServerThread50 implements Runnable {
     private DataOutputStream mOut;
     private DataInputStream mIn;
     public String grupoActual = "General";
+    private String idClientChat = "0812";
+    private static final byte[] FILE_META_MAGIC = "DOGMETA1".getBytes(StandardCharsets.UTF_8);
 
     public TCPServerThread50(Socket client, TCPServer50 tcpserver, int clientID) {
         this.client = client;
@@ -29,54 +35,189 @@ public class TCPServerThread50 implements Runnable {
             System.out.println("TCP Server C: Conectado cliente ID " + clientID);
 
             while (running) {
-                // LEER CABECERA (Protocolo)
-                // 1 byte: Tipo (1=Texto, 2=Imagen, 3=Archivo)
                 int tipo = mIn.readByte();
-                // 4 bytes: Longitud del contenido
                 int longitud = mIn.readInt();
 
-                // Leer el Payload (el contenido real)
                 byte[] payload = new byte[longitud];
                 mIn.readFully(payload);
 
-                // Procesar el mensaje según su tipo
                 if (tcpserver.getMessageListener() != null) {
                     if (tipo == 1) {
-                        String texto = new String(payload, "UTF-8");
-                        // Si es un comando de cambio de grupo, no se cifra y se procesa aquí
-                        if (texto.startsWith("JOIN:")) {
-                            this.grupoActual = texto.substring(5).trim();
-                            System.out.println("Cliente " + clientID + " se unió al grupo: " + this.grupoActual);
-                        } else {
-                            // Pasamos el grupo y el mensaje al nodo principal separados por un "|"
-                            tcpserver.getMessageListener().messageReceived(this.grupoActual + "|" + "Cliente " + clientID + ": " + texto);
-                        }
+                        processTextMessage(new String(payload, "UTF-8"));
                     } else {
-                        // Para imágenes (2) o archivos (3), guardamos los bytes en disco
-                        String extension = (tipo == 2) ? ".jpg" : ".dat";
-                        String fileName = "recibido_cliente_" + clientID + "_" + System.currentTimeMillis() + extension;
-
-                        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName)) {
-                            fos.write(payload);
-                        }
-                        tcpserver.getMessageListener().messageReceived("Archivo guardado con éxito: " + fileName + " (" + longitud + " bytes)");
+                        processBinaryMessage(tipo, longitud, payload);
                     }
                 }
             }
+        } catch (EOFException e) {
+            System.out.println("TCP Server S: Cliente " + clientID + " desconectado correctamente");
         } catch (IOException e) {
-            System.out.println("TCP Server S: Error o desconexión del cliente " + clientID + ": " + e.getMessage());
+            if (isNormalDisconnect(e)) {
+                System.out.println("TCP Server S: Cliente " + clientID + " desconectado correctamente");
+            } else {
+                System.out.println("TCP Server S: Error del cliente " + clientID + ": " + e.getMessage());
+            }
+        } catch (RuntimeException e) {
+            if (isNormalDisconnect(e)) {
+                System.out.println("TCP Server S: Cliente " + clientID + " desconectado correctamente");
+            } else {
+                System.out.println("TCP Server S: Error del cliente " + clientID + ": " + e.getMessage());
+            }
         } finally {
             stopClient();
+        }
+    }
+
+    private boolean isNormalDisconnect(Exception e) {
+        String message = e.getMessage();
+        return message == null
+                || message.toLowerCase().contains("connection reset")
+                || message.toLowerCase().contains("socket closed")
+                || message.toLowerCase().contains("se ha anulado una conexion")
+                || message.toLowerCase().contains("forcibly closed");
+    }
+
+    private void processTextMessage(String texto) {
+        if (texto.startsWith("JOIN:")) {
+            this.grupoActual = texto.substring(5).trim();
+            System.out.println("Cliente " + clientID + " se unio al grupo: " + this.grupoActual);
+            sendText("SISTEMA: Unido al grupo " + this.grupoActual);
+            return;
+        }
+
+        if (texto.startsWith("IDENT:")) {
+            this.idClientChat = normalizeChatId(texto.substring(6));
+            System.out.println("Cliente " + clientID + " validado como idClientChat " + this.idClientChat);
+            sendText("SISTEMA: ClienteAsignado:" + clientID);
+            sendText("SISTEMA: Usuario Validado idClientChat " + this.idClientChat);
+            return;
+        }
+
+        if (texto.startsWith("CLONE:")) {
+            this.idClientChat = normalizeChatId(texto.substring(6));
+            System.out.println("Cliente " + clientID + " solicita clonar idClientChat " + this.idClientChat);
+            sendText("SISTEMA: Clonando historial de idClientChat " + this.idClientChat);
+            tcpserver.sendHistory(this.idClientChat, this);
+            return;
+        }
+
+        String mensajeChat = "Cliente " + clientID + ": " + texto;
+        tcpserver.saveHistory(this.idClientChat, mensajeChat);
+        tcpserver.getMessageListener().messageReceived(this.grupoActual + "|" + mensajeChat);
+    }
+
+    private void processBinaryMessage(int tipo, int longitud, byte[] payload) throws IOException {
+        String extension = (tipo == 2) ? ".jpg" : ".dat";
+        String etiqueta = (tipo == 2) ? "Imagen" : "Archivo";
+        FilePayload filePayload = decodeFilePayload(payload);
+        String ownerClientId = normalizeFileOwner(filePayload.ownerClientId);
+        String fileName = "recibido_cliente_" + ownerClientId + "_" + System.currentTimeMillis() + extension;
+
+        try (FileOutputStream fos = new FileOutputStream(fileName)) {
+            fos.write(filePayload.content);
+        }
+
+        String detalleArchivo = "[" + etiqueta + " recibido: " + fileName + " (" + filePayload.content.length + " bytes)]";
+        String eventoArchivo = "Cliente " + ownerClientId + ": " + detalleArchivo;
+        tcpserver.saveHistory(this.idClientChat, eventoArchivo);
+        tcpserver.getMessageListener().messageReceived(this.grupoActual + "|" + eventoArchivo);
+        sendText("BINARY_OK:" + detalleArchivo);
+    }
+
+    private FilePayload decodeFilePayload(byte[] payload) {
+        if (!hasFileMetadata(payload)) {
+            return new FilePayload(null, null, payload);
+        }
+
+        try {
+            ByteArrayInputStream bais = new ByteArrayInputStream(payload);
+            byte[] magic = new byte[FILE_META_MAGIC.length];
+            int magicRead = bais.read(magic, 0, magic.length);
+            if (magicRead != FILE_META_MAGIC.length) {
+                return new FilePayload(null, null, payload);
+            }
+
+            DataInputStream metadataIn = new DataInputStream(bais);
+            int nameLength = metadataIn.readInt();
+            if (nameLength <= 0 || nameLength > 4096 || nameLength > bais.available()) {
+                return new FilePayload(null, null, payload);
+            }
+
+            byte[] nameBytes = new byte[nameLength];
+            metadataIn.readFully(nameBytes);
+            String fileName = new String(nameBytes, StandardCharsets.UTF_8);
+
+            String ownerClientId = null;
+            if (fileName.startsWith("CLIENTE_CHAT=") && fileName.contains("|")) {
+                String[] parts = fileName.split("\\|", 2);
+                ownerClientId = parts[0].substring("CLIENTE_CHAT=".length()).trim();
+                fileName = parts[1];
+            }
+
+            byte[] content = new byte[bais.available()];
+            metadataIn.readFully(content);
+            return new FilePayload(fileName, ownerClientId, content);
+        } catch (IOException e) {
+            return new FilePayload(null, null, payload);
+        }
+    }
+
+    private String normalizeFileOwner(String ownerClientId) {
+        if (ownerClientId == null || ownerClientId.trim().isEmpty()) {
+            return String.valueOf(clientID);
+        }
+
+        return ownerClientId.trim().replaceAll("[^0-9A-Za-z_-]", "_");
+    }
+
+    private boolean hasFileMetadata(byte[] payload) {
+        if (payload.length < FILE_META_MAGIC.length + 4) {
+            return false;
+        }
+
+        for (int i = 0; i < FILE_META_MAGIC.length; i++) {
+            if (payload[i] != FILE_META_MAGIC[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static class FilePayload {
+        private final String fileName;
+        private final String ownerClientId;
+        private final byte[] content;
+
+        private FilePayload(String fileName, String ownerClientId, byte[] content) {
+            this.fileName = fileName;
+            this.ownerClientId = ownerClientId;
+            this.content = content;
+        }
+    }
+
+    private String normalizeChatId(String value) {
+        String clean = value.trim();
+        return clean.isEmpty() ? "0812" : clean;
+    }
+
+    public void sendText(String message) {
+        try {
+            sendMessage(1, message.getBytes("UTF-8"));
+        } catch (IOException e) {
+            System.out.println("Error preparando texto para cliente " + clientID + ": " + e.getMessage());
         }
     }
 
     public void sendMessage(int tipo, byte[] data) {
         try {
             if (mOut != null) {
-                mOut.writeByte(tipo);
-                mOut.writeInt(data.length);
-                mOut.write(data);
-                mOut.flush();
+                synchronized (mOut) {
+                    mOut.writeByte(tipo);
+                    mOut.writeInt(data.length);
+                    mOut.write(data);
+                    mOut.flush();
+                }
             }
         } catch (IOException e) {
             System.out.println("Error enviando mensaje al cliente " + clientID + ": " + e.getMessage());
@@ -91,6 +232,8 @@ public class TCPServerThread50 implements Runnable {
             }
         } catch (IOException e) {
             System.out.println("Error al cerrar socket del cliente " + clientID);
+        } finally {
+            tcpserver.removeClient(this);
         }
     }
 }

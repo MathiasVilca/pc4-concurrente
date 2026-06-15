@@ -3,14 +3,16 @@ package utils;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class TCPServer50 {
     private int port;
     private volatile boolean running = false;
     private ServerSocket serverSocket;
-    private List<TCPServerThread50> clientThreads = new ArrayList<>();
+    private List<TCPServerThread50> clientThreads = new CopyOnWriteArrayList<>();
+    private ConcurrentHashMap<String, CopyOnWriteArrayList<String>> chatHistory = new ConcurrentHashMap<>();
     private int nrcli = 0;
     private OnMessageReceived messageListener;
 
@@ -45,6 +47,23 @@ public class TCPServer50 {
         } finally {
             stop();
         }
+    }
+
+    public void saveHistory(String idClientChat, String message) {
+        chatHistory.computeIfAbsent(idClientChat, key -> new CopyOnWriteArrayList<>()).add(message);
+    }
+
+    public void sendHistory(String idClientChat, TCPServerThread50 clientThread) {
+        List<String> history = chatHistory.getOrDefault(idClientChat, new CopyOnWriteArrayList<>());
+        clientThread.sendText("HISTORY_BEGIN:" + idClientChat + ":" + history.size());
+        for (String oldMessage : history) {
+            clientThread.sendText("HISTORY_ITEM:" + oldMessage);
+        }
+        clientThread.sendText("HISTORY_END:" + idClientChat);
+    }
+
+    public void removeClient(TCPServerThread50 clientThread) {
+        clientThreads.remove(clientThread);
     }
 
     public void broadcastMessage(int tipo, String message) {

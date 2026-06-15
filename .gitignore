@@ -3,15 +3,42 @@
 *.iml
 .gradle/
 local.properties
+captures/
+.externalNativeBuild/
+.cxx/
 
-# Archivos de compilación (Evita subir binarios al repo)
+# Archivos de compilacion Java/Android
 build/
 out/
 bin/
+**/build/
+**/out/
+**/bin/
 *.class
+*.jar
+*.war
+*.ear
 
-# Archivos temporales de Sistema Operativo
+# Paquetes generados
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Logs y reportes temporales
+*.log
+hs_err_pid*
+replay_pid*
+
+# Archivos recibidos durante pruebas del servidor
+recibido_cliente_*
+
+# Archivos temporales de editores y sistema operativo
 .DS_Store
 Thumbs.db
-
-
+desktop.ini
+*.tmp
+*.temp
+*.swp
+*.swo
+~$*
