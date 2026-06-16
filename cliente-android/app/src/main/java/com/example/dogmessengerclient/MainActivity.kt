@@ -378,6 +378,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun agregarMensaje(mensaje: String) {
+        val debeBajar = debeAutoDesplazarChat()
         val textView = TextView(this)
         textView.text = mensaje
         textView.textSize = 14f
@@ -387,9 +388,7 @@ class MainActivity : AppCompatActivity() {
             descargarYMostrarImagen(imageName)
         }
 
-        scrollView.post {
-            scrollView.fullScroll(ScrollView.FOCUS_DOWN)
-        }
+        desplazarChatSiCorresponde(debeBajar)
     }
 
     private fun extraerNombreImagen(mensaje: String): String? {
@@ -445,6 +444,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun agregarImagen(bitmap: Bitmap) {
+        val debeBajar = debeAutoDesplazarChat()
         val imageView = ImageView(this)
         imageView.setImageBitmap(bitmap)
         imageView.adjustViewBounds = true
@@ -457,18 +457,28 @@ class MainActivity : AppCompatActivity() {
         params.setMargins(0, 6, 0, 10)
         imageView.layoutParams = params
         chatContainer.addView(imageView)
-        scrollView.post {
-            scrollView.fullScroll(ScrollView.FOCUS_DOWN)
-        }
+        desplazarChatSiCorresponde(debeBajar)
     }
 
     private fun agregarTextoSimple(mensaje: String) {
+        val debeBajar = debeAutoDesplazarChat()
         val textView = TextView(this)
         textView.text = mensaje
         textView.textSize = 12f
         chatContainer.addView(textView)
-        scrollView.post {
-            scrollView.fullScroll(ScrollView.FOCUS_DOWN)
+        desplazarChatSiCorresponde(debeBajar)
+    }
+
+    private fun debeAutoDesplazarChat(): Boolean {
+        val distanciaAlFinal = chatContainer.bottom - (scrollView.height + scrollView.scrollY)
+        return distanciaAlFinal <= 120
+    }
+
+    private fun desplazarChatSiCorresponde(debeBajar: Boolean) {
+        if (debeBajar) {
+            scrollView.post {
+                scrollView.fullScroll(ScrollView.FOCUS_DOWN)
+            }
         }
     }
 
