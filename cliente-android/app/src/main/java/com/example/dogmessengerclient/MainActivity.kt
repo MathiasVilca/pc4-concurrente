@@ -65,7 +65,6 @@ class MainActivity : AppCompatActivity() {
     private var mTcpClient: TCPClient50? = null
     private var mVentasClient: TCPClient50? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val pendingOwnAttachmentMessages = mutableSetOf<String>()
     private var assignedChatClientId: String? = null
     private var isConnected = false
 
@@ -170,7 +169,7 @@ class MainActivity : AppCompatActivity() {
             if (mVentasClient != null) {
                 val cliente = obtenerIdChat()
                 mVentasClient?.sendMessage("COMPRAR:$cliente:PREMIUM")
-                agregarMensaje("Yo: Procesando compra PREMIUM...")
+                agregarMensaje("Procesando compra PREMIUM...")
             } else {
                 Toast.makeText(this, "Nodo de ventas inactivo", Toast.LENGTH_SHORT).show()
             }
@@ -179,7 +178,7 @@ class MainActivity : AppCompatActivity() {
         btnReporte.setOnClickListener {
             if (mVentasClient != null) {
                 mVentasClient?.sendMessage("REPORTE")
-                agregarMensaje("Yo: Solicitando metricas...")
+                agregarMensaje("Solicitando metricas...")
             }
         }
     }
@@ -272,7 +271,6 @@ class MainActivity : AppCompatActivity() {
 
         val mensajeCifrado = AESCrypto.encrypt(mensaje)
         mTcpClient?.sendMessage(mensajeCifrado)
-        agregarMensaje("Yo: $mensaje [cifrado]")
         etMensaje.text.clear()
     }
 
@@ -366,12 +364,8 @@ class MainActivity : AppCompatActivity() {
         val remitente = partes[0]
         val payload = partes[1]
 
-        if (pendingOwnAttachmentMessages.remove(payload)) {
-            return ""
-        }
-
         return try {
-            "$remitente: ${AESCrypto.decrypt(payload)} [descifrado]"
+            "$remitente: ${AESCrypto.decrypt(payload)}"
         } catch (e: Exception) {
             message
         }
@@ -581,8 +575,6 @@ class MainActivity : AppCompatActivity() {
             try {
                 val mensajeChat = enviarAvisoRecibido(etiqueta, bytes.size, nombreArchivo, port, tipo, bytes)
                 mainHandler.post {
-                    agregarMensaje("Yo: $mensajeChat")
-                    pendingOwnAttachmentMessages.add(mensajeChat)
                     mTcpClient?.sendMessage(mensajeChat)
                     Toast.makeText(this, "$etiqueta enviado", Toast.LENGTH_SHORT).show()
                 }

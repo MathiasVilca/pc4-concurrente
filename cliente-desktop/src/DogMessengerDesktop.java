@@ -21,9 +21,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Base64;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,7 +36,6 @@ public class DogMessengerDesktop extends JFrame {
     private Socket socket;
     private DataOutputStream out;
     private volatile boolean running = false;
-    private final Set<String> pendingOwnAttachmentMessages = Collections.synchronizedSet(new HashSet<>());
     private String assignedChatClientId = null;
 
     public DogMessengerDesktop() {
@@ -166,7 +162,6 @@ public class DogMessengerDesktop extends JFrame {
                 append("--- Te has movido al grupo: " + message.substring(6).trim() + " ---");
             } else {
                 sendPlain(AESCryptoDesktop.encrypt(message));
-                append("Yo: " + message + " [cifrado]");
             }
             txtMessage.setText("");
         } catch (Exception e) {
@@ -217,9 +212,7 @@ public class DogMessengerDesktop extends JFrame {
             byte[] data = Files.readAllBytes(chooser.getSelectedFile().toPath());
             String fileName = chooser.getSelectedFile().getName();
             String chatMessage = sendBinaryToNode(port, tipo, fileName, data);
-            append("Yo: " + chatMessage);
             if (running) {
-                pendingOwnAttachmentMessages.add(chatMessage);
                 sendPlain(chatMessage);
             }
         } catch (Exception e) {
@@ -298,12 +291,8 @@ public class DogMessengerDesktop extends JFrame {
             return message;
         }
 
-        if (pendingOwnAttachmentMessages.remove(parts[1])) {
-            return "";
-        }
-
         try {
-            return parts[0] + ": " + AESCryptoDesktop.decrypt(parts[1]) + " [descifrado]";
+            return parts[0] + ": " + AESCryptoDesktop.decrypt(parts[1]);
         } catch (Exception e) {
             return message;
         }
