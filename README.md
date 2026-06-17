@@ -128,12 +128,12 @@ En la app Android:
 3. Escribir el mismo `idClientChat`, por ejemplo `0812`.
 4. Presionar `Conectar`.
 
-Al conectarse, Android abre conexiones al cluster:
+Durante la ejecucion, Android usa el cluster de la siguiente forma:
 
-- `8189`: mensajes.
-- `8190`: archivos.
-- `8191`: imagenes.
-- `8192`: ventas.
+- `8189`: conexion principal de mensajes.
+- `8190`: socket temporal para enviar archivos.
+- `8191`: socket temporal para enviar y descargar imagenes.
+- `8192`: conexion al nodo de ventas.
 
 ## 6. Probar chat y grupos
 
@@ -216,28 +216,7 @@ Desde Desktop:
 2. Elegir un archivo.
 3. Verificar la terminal de `MainArchivos`.
 
-## 11. Limpieza antes de entregar
 
-No subir archivos temporales o binarios. Antes de comprimir, revisar:
-
-```powershell
-git status --short
-```
-
-Evitar incluir:
-
-- Carpetas `build`.
-- Carpetas `out`.
-- Carpeta `.gradle`.
-- Archivos `.class`.
-- APK si el docente pidio solo codigo fuente.
-
-El comprimido final debe contener:
-
-- Codigo fuente.
-- PDF del informe.
-- PDF de presentacion.
-- Diagramas de arquitectura y protocolo.
 
 ## Diagrama textual de arquitectura
 
